@@ -1,0 +1,84 @@
+contract ClcToken =
+  record state = {
+    totalSupply : int,
+    decimals : int,
+    name : string,
+    symbol : string,
+    balances : map(address, int),
+    allowed : map(address, map(address, int)), 
+    minter : address }   
+
+  entrypoint init(_totalSupply : int, _decimals : int, _name : string, _symbol : string ) = {
+    totalSupply = _totalSupply,
+    decimals = _decimals,
+    name = _name,
+    symbol = _symbol,
+    balances = {[Call.caller] = _totalSupply }, 
+    allowed = {},
+    minter = Call.caller }    
+
+  stateful entrypoint totalSupply() : int = state.totalSupply
+  stateful entrypoint decimals() : int = state.decimals
+  stateful entrypoint name() : string = state.name
+  stateful entrypoint symbol() : string = state.symbol
+
+  stateful entrypoint balanceOf(tokenOwner : address ) : int =
+    Map.lookup_default(tokenOwner, state.balances, 0)
+                        
+  stateful entrypoint transfer(to : address, tokens : int) =
+    put( state{balances[Call.caller] = sub(state.balances[Call.caller], tokens) })
+    put( state{balances[to] = add(Map.lookup_default(to, state.balances, 0), tokens) })
+    transferEvent(Call.caller, to, tokens)
+    true
+
+  stateful entrypoint approve(spender : address, tokens : int) =
+    ensure_allowed(Call.caller)
+    put( state{allowed[Call.caller][spender] = tokens} )
+    approvalEvent(Call.caller, spender, tokens)
+    true
+
+  stateful entrypoint transferFrom(from : address, to : address, tokens : int) =
+    put( state{ balances[from] = sub(state.balances[from], tokens) })
+    put( state{ allowed[from][Call.caller] = sub(state.allowed[from][Call.caller], tokens) })
+    put( state{ balances[to] = add(balanceOf(to), tokens) })
+    transferEvent(from, to, tokens)
+    true
+    
+  stateful entrypoint changeAllowanceToMint( _addressToMint : address ) =
+    if(state.minter != Call.caller)
+        abort("You are not minter")
+    put(state{minter = _addressToMint})
+    true  
+    
+  stateful entrypoint mintTokens( _atAddress : address, _amount : int ) =
+    if(state.minter != Call.caller)
+      abort("You are not minter")
+    put( state{ balances[_atAddress] = add(balanceOf(_atAddress), _amount) })
+    put( state{ totalSupply = add(state.totalSupply, _amount)})
+    true                     
+
+  entrypoint allowance(_owner : address, _spender : address) : int =
+    state.allowed[_owner][_spender]
+    
+
+  stateful function ensure_allowed(key : address) =
+    switch(Map.lookup(key, state.allowed))
+      None => put(state{allowed[key] = {}})
+      Some(_) => ()
+
+  stateful function transferEvent(from : address, to : address, tokens : int) =
+    let e = (from, to, tokens)
+    e
+
+  stateful function approvalEvent(from : address, to : address, tokens : int) =
+    let e = (from, to, tokens)
+    e
+
+  function sub(_a : int, _b : int) : int =
+    require(_b =< _a, "Error")
+    _a - _b
+
+  function add(_a : int, _b : int) : int =
+    let c : int = _a + _b
+    require(c >= _a, "Error")
+    c
